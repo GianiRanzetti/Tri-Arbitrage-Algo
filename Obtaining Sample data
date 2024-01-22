@@ -1,0 +1,29 @@
+import ccxt
+import pandas as pd
+
+kraken = ccxt.kraken()
+
+def get_crypto_info(exchange, symbol, levels=3):
+    ticker = exchange.fetch_ticker(symbol)
+    order_book = exchange.fetch_order_book(symbol, limit=levels)
+
+    order_book_data = {
+        'symbol': symbol,
+        'last_price': ticker['last'],
+        'quote_volume': ticker['quoteVolume']
+    }
+
+    for level in range(levels):
+        bid_price, bid_amount, bid_timestamp = order_book['bids'][level]
+        order_book_data[f'bid_price_{level+1}'] = bid_price
+        order_book_data[f'bid_amount_{level+1}'] = bid_amount
+
+        ask_price, ask_amount, ask_timestamp = order_book['asks'][level]
+        order_book_data[f'ask_price_{level+1}'] = ask_price
+        order_book_data[f'ask_amount_{level+1}'] = ask_amount
+
+    return order_book_data
+
+cryptos = ['ETH/BTC', 'ADA/BTC', 'ADA/ETH']
+order_book_data = [get_crypto_info(kraken, crypto) for crypto in cryptos]
+order_book_df = pd.DataFrame(order_book_data)
