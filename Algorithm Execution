@@ -1,0 +1,49 @@
+current_position = pd.DataFrame([['ETH/BTC', 100, 0], ['ADA/BTC', 0, 0], ['ADA/ETH', 0, 0]], columns=['Pair', 'Position', 'PnL'])
+transactions = pd.DataFrame([[pd.Timestamp('now'), 100, order_book_df[order_book_df['symbol'] == 'ETH/BTC']['bid_price_1'].iloc[0], 'ETH/BTC', 1]],
+                            columns=['Date', 'Qty', 'Price', 'Symbol', 'Signal'])
+cryptos = ['ETH/BTC', 'ADA/BTC', 'ADA/ETH']
+
+ def update_positions_and_transactions(orders, order_book_df, current_position, transactions):
+    # Handle new orders
+    for order in orders:
+        pair, signal, price, qty = order
+        new_transaction = pd.DataFrame({
+            'Date': [pd.Timestamp('now')],
+            'Qty': [qty],
+            'Price': [price],
+            'Symbol': [pair],
+            'Signal': [signal]
+        })
+        transactions = pd.concat([transactions, new_transaction], ignore_index=True)
+
+        # Update current_position for new orders
+        if pair in current_position['Pair'].values:
+            position_index = current_position[current_position['Pair'] == pair].index[0]
+            current_position.at[position_index, 'Position'] += signal*qty
+
+    # Update PnL for all positions based on latest market data
+    for index, row in current_position.iterrows():
+        pair = row['Pair']
+        last_price = order_book_df[order_book_df['symbol'] == pair]['last_price'].iloc[0]
+        position_index = current_position[current_position['Pair'] == pair].index[0]
+
+        pair_transactions = transactions[transactions['Symbol'] == pair]
+        cost_basis = (pair_transactions['Price'] * pair_transactions['Qty'] * pair_transactions['Signal']).sum()
+
+        pair_pnl = (current_position.at[position_index, 'Position'] * last_price) - cost_basis
+        current_position.at[position_index, 'PnL'] = pair_pnl
+        print(pair_pnl)
+
+    return current_position, transactions
+for timestamp in range(10):
+  # Get Market Data
+  order_book_data = [get_crypto_info(kraken, crypto) for crypto in cryptos]
+  order_book_df = pd.DataFrame(order_book_data)
+  # Trading
+  orders = trading_algorithm(order_book_df, current_position, transactions)
+  current_position, transactions = update_positions_and_transactions(orders, order_book_df, current_position, transactions)
+  # Priting the orders
+  print(orders)
+
+print(current_position)
+print(transactions)
