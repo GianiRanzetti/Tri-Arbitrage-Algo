@@ -1,0 +1,80 @@
+def trading_algorithm(crypto_order_book: pd.DataFrame, current_position:pd.DataFrame, transactions: pd.DataFrame) -> tuple:
+
+#Function to adjust exchange rates to account for Kraken transaction fees, Fees assumed at 0.04% as a baseline
+  def apply_transaction_cost(price, fees= 0.0):
+    price = price * (1-(fees/100))
+    return price
+
+#Function to determine if there is an arbitrage opportunity in the market using a tri-arbitrage strategy.
+#Can either be a "long" or "short" arbitrage opportunity
+  def arbitrage_check(dataframe):
+
+    if s_pair_0 * b_inv_pair_1 * s_pair_2 > 1 and (s_pair_0 * b_inv_pair_1 * s_pair_2)-1 > 0: #Condition for an short arbitrage opportunity and that the transaction profits are positive
+      print("\nThere is a SHORT arbitrage opportunity in the market")
+
+      short_max_amount = min(s_amount_0, s_amount_1 * b_pair_1 * s_inv_pair_0 , b_amount_2* b_pair_1* s_inv_pair_0 ) #Calculates the maximum trade quantity in order to leave no residual positions in ADA/BTC and ADA/ETH
+
+      trade_order = [("ETH/BTC", -1, dataframe.iloc[0,0], short_max_amount), #Inital transaction is a sell order for BTC
+                     ("ADA/BTC", 1, dataframe.iloc[1,2], short_max_amount * s_pair_0 * b_inv_pair_1), #Purchase ADA with BTC
+                     ("ADA/BTC", -1, dataframe.iloc[1,2], short_max_amount * s_pair_0 * b_inv_pair_1), #Artifical transaction to close the ADA/BTC position
+                     ("ADA/ETH", -1, dataframe.iloc[2,0], short_max_amount * s_pair_0 * b_inv_pair_1), #Purchase ETH with ADA
+                     ("ADA/ETH", 1, dataframe.iloc[2,0], short_max_amount * s_pair_0 * b_inv_pair_1), #Artifical transaction to close the ADA/ETH position
+                     ("ETH/BTC", 1, dataframe.iloc[0,2], short_max_amount * s_pair_0 * b_inv_pair_1 * b_pair_2),#Final transaction is a buy order to close previous ETH/BTC position,
+                       ]                                                                                          #The Qty of this transaction should be larger than the intital transaction Qty
+      return trade_order
+
+    elif s_pair_0 * b_inv_pair_1 * s_pair_2 < 1 and (s_inv_pair_2 * b_pair_1 * s_inv_pair_0)-1 > 0: #Condition for an long arbitrage opportunity and that the transaction profits are positive
+      print("\nThere is a LONG arbitrage opportunity in the market")
+
+      long_max_amount = min(b_amount_0, b_amount_1 *b_pair_2, s_amount_2 *b_pair_2)  #Calculates the maximum trade quantity in order to leave no residual positions in ADA/BTC and ADA/ETH
+
+      trade_order = [("ETH/BTC", 1, dataframe.iloc[0,0], long_max_amount), #Inital transaction is a buy  order for ETH
+                     ("ADA/ETH", 1, dataframe.iloc[2,2], long_max_amount*b_inv_pair_2), #Purchase ADA with ETH
+                     ("ADA/ETH",-1, dataframe.iloc[2,2], long_max_amount*b_inv_pair_2), #Artifical transaction to close the ADA/ETH position
+                     ("ADA/BTC", -1, dataframe.iloc[1,0], long_max_amount*b_inv_pair_2), #Purchase BTC with ADA
+                     ("ADA/BTC", 1, dataframe.iloc[1,0], long_max_amount*b_inv_pair_2), #Artifical transaction to close the ADA/BTC position
+                     ("ETH/BTC", -1, dataframe.iloc[0,2], long_max_amount*b_inv_pair_2* s_pair_1* b_inv_pair_0), #Final transaction is a sell order to close previous ETH/BTC position,
+                       ]                                                                                         #The Qty of this transaction should be smaller than the intital transaction Qty
+      return trade_order
+
+    else:
+      print("\nThere is no arbitrage opportunity in the market")
+      return list()
+
+#Define key variables
+  selected_columns = crypto_order_book[["bid_price_1", "bid_amount_1", "ask_price_1", "ask_amount_1"]]
+  data = pd.DataFrame(selected_columns)
+  fees = 0.04 #We assume fees of 0.04%, the kraken market-taker fees for 30-day fund volumes over $500,000,000
+
+#Compute bid data exchange rates after transaction costs
+  s_pair_0 = apply_transaction_cost(data.iloc[0,0],fees)
+  s_pair_1 = apply_transaction_cost(data.iloc[1,0],fees)
+  s_pair_2 = apply_transaction_cost(data.iloc[2,0],fees)
+  s_inv_pair_0 = apply_transaction_cost(1/data.iloc[0,0],fees)
+  s_inv_pair_1 = apply_transaction_cost(1/data.iloc[1,0],fees)
+  s_inv_pair_2 = apply_transaction_cost(1/data.iloc[2,0],fees)
+  s_amount_0 = data.iloc[0,1]
+  s_amount_1 = data.iloc[1,1]
+  s_amount_2 = data.iloc[2,1]
+
+#Compute ask data exchange rates after transaction costs
+  b_pair_0 = apply_transaction_cost(data.iloc[0,2],fees)
+  b_pair_1 = apply_transaction_cost(data.iloc[1,2],fees)
+  b_pair_2 = apply_transaction_cost(data.iloc[2,2],fees)
+  b_inv_pair_0 = apply_transaction_cost(1/data.iloc[0,2],fees)
+  b_inv_pair_1 = apply_transaction_cost(1/data.iloc[1,2],fees)
+  b_inv_pair_2 = apply_transaction_cost(1/data.iloc[2,2],fees)
+  b_amount_0 = data.iloc[0,3]
+  b_amount_1 = data.iloc[1,3]
+  b_amount_2 = data.iloc[2,3]
+
+#Apply one-time transaction to remove position of 100 ETH/BTC at the data that it was bought at to completely offset
+  if current_position.iloc[0,1] == 100:
+    one_time_transaction = [("ETH/BTC", -1, transactions["Price"].iloc[0], 100)]
+
+  else:
+    one_time_transaction = []
+
+  decisions = one_time_transaction + arbitrage_check(data)
+
+  return decisions
