@@ -22,4 +22,3 @@ File 3: "Algorithm Execution" - Creates an Order Book containing all transaction
 
 ## Limitations
 The last file of the project, "Algorithm Execution" only executes the trades within the confines of the script. An improvement that could be made is to connect the orderbook with a crypto exchange to execute the trades in real time. It would be difficult to implement because the code is quite slow (it takes a couple seconds to execute) compared to the milliseconds required to successfully capitalize on arbitrage opportunities.
-ghjhgjgj
